@@ -54,6 +54,11 @@ timer() {
   # Parse options
   while (($#)); do
     case $1 in
+      --)
+        # End-of-options separator - consume and stop processing
+        shift
+        break
+        ;;
       -f|--format)
         formatted=1
         shift
@@ -171,6 +176,10 @@ declare -- chars split_opts
 # Process all options before the command
 while (($#)); do
   case $1 in
+    --)           # End-of-options separator - consume and stop processing
+                  shift
+                  cmd_args=("$@")
+                  break ;;
     -f|--format)  formatted=1 ;;
     -h|--help)    usage 0 ;;
     -V|--version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
