@@ -1,0 +1,208 @@
+#!/bin/bash
+# High-precision command timer with optional formatted output
+# Pure Bash implementation - zero external dependencies
+# Uses EPOCHREALTIME for microsecond precision timing
+
+# Format time in human-readable format (days, hours, minutes, seconds)
+# Input: microseconds as integer
+# Output: formatted string like "1d 02h 34m 56.789s"
+# Uses pure Bash integer arithmetic with microsecond-scaled time constants
+format_time_us() {
+  local -i remaining_us=$1
+  local -i days hours minutes
+  local -- output=''
+
+  # Time constants in microseconds (seconds * 1,000,000)
+  local -i -r day_us=86400000000 hour_us=3600000000 minute_us=60000000
+
+  # Calculate days using integer division
+  days=$((remaining_us / day_us))
+  if (( days > 0 )); then
+    output="${days}d "
+    remaining_us=$((remaining_us - days * day_us))
+  fi
+
+  # Calculate hours
+  hours=$((remaining_us / hour_us))
+  if (( hours > 0 || days > 0 )); then
+    output="${output}$(printf "%02dh " "$hours")"
+    remaining_us=$((remaining_us - hours * hour_us))
+  fi
+
+  # Calculate minutes
+  minutes=$((remaining_us / minute_us))
+  if (( minutes > 0 || hours > 0 || days > 0 )); then
+    output="${output}$(printf "%02dm " "$minutes")"
+    remaining_us=$((remaining_us - minutes * minute_us))
+  fi
+
+  # Always show seconds (convert microseconds back to seconds with printf)
+  # Uses scientific notation: 1234567e-6 = 1.234567
+  output="${output}$(printf "%.3fs" "${remaining_us}e-6")"
+  echo "$output"
+}
+declare -fx format_time_us
+
+# High-precision timing with EPOCHREALTIME
+# Captures execution time of any command with microsecond precision
+# Preserves command exit status and errexit state
+# Options: -f (formatted output), -h/-V (noop in function mode)
+timer() {
+  local -- start end runtime
+  local -i formatted=0 errno=0
+
+  # Parse options
+  while (($#)); do
+    case $1 in
+      -f|--format)
+        formatted=1
+        shift
+        ;;
+      -h|--help|-V|--version)
+        # Noop - silently ignore in function mode
+        shift
+        ;;
+      -*)
+        # Unknown option - treat as part of command
+        break
+        ;;
+      *)
+        # First non-option argument
+        break
+        ;;
+    esac
+  done
+
+  # Convert EPOCHREALTIME to integer microseconds (remove decimal point)
+  # Example: 1234567890.123456 -> 1234567890123456
+  local -i start_us=${EPOCHREALTIME//./}
+
+  # Temporarily disable errexit for command execution to prevent script termination
+  # This ensures the user's command runs in its natural environment without set -e
+  # Save errexit state first to restore it afterward
+  local -i errexit_was_set=0
+  [[ $- == *e* ]] && errexit_was_set=1
+  set +e
+  "$@"
+  errno=$?
+  # Restore errexit state only if it was originally set
+  ((errexit_was_set)) && set -e
+
+  # Calculate elapsed time in microseconds using pure Bash integer arithmetic
+  local -i end_us=${EPOCHREALTIME//./}
+  local -i elapsed_us=$((end_us - start_us))
+
+  if ((formatted)); then
+    # Pass microseconds directly to format_time_us for human-readable output
+    >&2 echo -e "\n# ${FUNCNAME[0]}: $(format_time_us "$elapsed_us")"
+  else
+    # Convert microseconds to seconds using printf scientific notation
+    runtime=$(printf "%.6f" "${elapsed_us}e-6")
+    >&2 echo -e "\n# ${FUNCNAME[0]}: ${runtime}s"
+  fi
+
+  # Return the command's original exit status
+  return "$errno"
+}
+declare -fx timer
+
+
+# If sourced (not run as script), functions are now loaded - return immediately
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+# ============================================================================
+# Script Mode - Only executed when run directly, not when sourced
+# ============================================================================
+#!/bin/bash #semantic
+set -euo pipefail
+
+declare -r VERSION='1.0.1'
+declare -r SCRIPT_NAME=${0##*/}
+
+# Usage function
+usage() {
+  cat <<EOT
+$SCRIPT_NAME $VERSION - High-precision command timer
+
+Times the execution of any command with microsecond precision using EPOCHREALTIME.
+Pure Bash implementation with zero external dependencies.
+
+Usage: $SCRIPT_NAME [Options] <command> [args...]
+       source $SCRIPT_NAME  # to load timer function
+
+Options:
+  -f, --format      Format output as Xd XXh XXm X.XXXs (human-readable)
+  -h, --help        Display this help message
+  -V, --version     Display version information
+
+  Combined options supported: -fh, -fV, etc.
+
+Examples:
+  # Time a simple command
+  $SCRIPT_NAME sleep 1
+
+  # Time with formatted output
+  $SCRIPT_NAME -f make -j4
+
+  # Combined options
+  $SCRIPT_NAME -fV
+
+  # Source and use as function (in scripts or interactive shell)
+  source $SCRIPT_NAME
+  timer -f mycommand arg1 arg2
+
+Notes:
+  - Output goes to stderr to preserve command stdout
+  - Exit status of timed command is preserved
+  - When sourced: -h and -V options are silently ignored
+
+EOT
+  exit "${1:-0}"
+}
+
+# Command-line processing - Parse options and build command array
+declare -i formatted=0 i
+declare -a cmd_args=()
+declare -- chars split_opts
+
+# Require at least one argument
+(($#)) || usage 1
+
+# Process all options before the command
+while (($#)); do
+  case $1 in
+    -f|--format)  formatted=1 ;;
+    -h|--help)    usage 0 ;;
+    -V|--version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    -[fhV]*) # Split combined short options using pure Bash (e.g., -fh -> -f -h)
+                  chars="${1:1}"; split_opts=''
+                  for ((i=0; i<${#chars}; i+=1)); do
+                    split_opts="$split_opts -${chars:i:1}"
+                  done
+                  #shellcheck disable=SC2086 # Intentional word splitting for option expansion
+                  set -- '' $split_opts "${@:2}" ;;
+    -*)           # Unknown option - use ${1@Q} for proper shell quoting
+                  >&2 echo "$SCRIPT_NAME: Invalid option ${1@Q}"
+                  usage 22 ;;
+    *)            # First non-option argument is the command - capture rest as array
+                  cmd_args=("$@")
+                  break ;;
+  esac
+  shift
+done
+
+# Verify we have a command to execute
+if ((${#cmd_args[@]} == 0)); then
+  >&2 echo "$SCRIPT_NAME: No command specified"
+  usage 1
+fi
+
+# Execute the timer function with collected options and command
+# The timer function preserves the command's exit status
+if ((formatted)); then
+  timer -f "${cmd_args[@]}"
+else
+  timer "${cmd_args[@]}"
+fi
+
+#fin
