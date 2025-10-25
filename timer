@@ -48,7 +48,7 @@ declare -fx format_time_us
 # Preserves command exit status and errexit state
 # Options: -f (formatted output), -h/-V (noop in function mode)
 timer() {
-  local -- start end runtime
+  local -- runtime
   local -i formatted=0 errno=0
 
   # Parse options
