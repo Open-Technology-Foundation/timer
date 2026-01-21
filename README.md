@@ -19,13 +19,22 @@ Bash 5.0+ (for `EPOCHREALTIME`)
 
 ## Installation
 
-```bash
-# Make executable
-chmod +x timer
+### One-liner (system)
 
-# Copy to PATH (optional)
-sudo cp timer /usr/local/bin/
+```bash
+sudo make install
 ```
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make install` | System install to `/usr/local/bin` (requires sudo) |
+| `make install-user` | User install to `~/.local/bin` |
+| `make uninstall` | Remove system install |
+| `make uninstall-user` | Remove user install |
+
+Installs both the script and bash completion.
 
 ## Usage
 

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Bash completion for timer command
+# Install: cp timer.bash-completion ~/.local/share/bash-completion/completions/timer
+
+_timer() {
+  local cur prev words cword
+  _init_completion || return
+
+  local opts="-f --format -j --json -o --output-to -h --help -V --version"
+
+  case $prev in
+    -o|--output-to)
+      _filedir
+      return ;;
+  esac
+
+  if [[ $cur == -* ]]; then
+    COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+    return
+  fi
+
+  # Complete commands (executables in PATH)
+  COMPREPLY=($(compgen -c -- "$cur"))
+}
+
+complete -F _timer timer

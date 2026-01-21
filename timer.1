@@ -1,0 +1,223 @@
+.TH TIMER 1 "January 2026" "timer 1.2.0" "User Commands"
+.SH NAME
+timer \- high-precision command timer with microsecond accuracy
+.SH SYNOPSIS
+.B timer
+.RI [ OPTIONS ]
+.I command
+.RI [ args... ]
+.br
+.B source timer
+.SH DESCRIPTION
+.B timer
+measures the execution time of any command with microsecond precision
+using Bash's
+.B EPOCHREALTIME
+variable. Pure Bash implementation with zero external dependencies.
+.PP
+Can be used as a standalone script or sourced as a library function.
+The command's exit status is preserved and returned.
+.SH OPTIONS
+.TP
+.BR \-f ", " \-\-format
+Output time in human-readable format:
+.IR Xd\ XXh\ XXm\ X.XXXs .
+Units are shown progressively (days only if >0, etc.).
+.TP
+.BR \-j ", " \-\-json
+Output timing results as JSON object containing:
+.IR elapsed_us ,
+.IR elapsed_s ,
+.IR elapsed_formatted ,
+.IR exit_code ,
+and
+.IR command .
+.TP
+.BR \-o ", " \-\-output\-to " " \fIFILE\fR
+Write timing output to
+.I FILE
+instead of stderr.
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-V ", " \-\-version
+Display version information and exit.
+.TP
+.B \-\-
+End of options. Subsequent arguments are treated as the command,
+even if they begin with a hyphen.
+.PP
+Short options can be combined:
+.B \-fj
+(but not with
+.BR \-o ).
+.SH OUTPUT FORMATS
+.SS Default
+.nf
+# timer: 1.234567s
+.fi
+.SS Formatted (\-f)
+.nf
+0.123s
+02m 15.456s
+01h 23m 45.678s
+2d 13h 45m 10.234s
+.fi
+.SS JSON (\-j)
+.nf
+{"elapsed_us":101234,"elapsed_s":0.101234,
+ "elapsed_formatted":"0.101s","exit_code":0,
+ "command":["sleep","0.1"]}
+.fi
+.SH EXAMPLES
+Basic timing:
+.PP
+.nf
+.RS
+timer sleep 1
+.RE
+.fi
+.PP
+Formatted output:
+.PP
+.nf
+.RS
+timer \-f make \-j4
+.RE
+.fi
+.PP
+JSON output for scripting:
+.PP
+.nf
+.RS
+timer \-j ./build.sh
+.RE
+.fi
+.PP
+Output to file:
+.PP
+.nf
+.RS
+timer \-o timing.log sleep 1
+.RE
+.fi
+.PP
+Library mode:
+.PP
+.nf
+.RS
+source timer
+timer \-f mycommand arg1 arg2
+.RE
+.fi
+.PP
+Time a command starting with hyphen:
+.PP
+.nf
+.RS
+timer \-\- \-\-version
+.RE
+.fi
+.SH LIBRARY MODE
+When sourced, the following functions are exported:
+.TP
+.BI timer " [OPTIONS] command [args...]"
+Main timing function. Options
+.B \-h
+and
+.B \-V
+are silently ignored. Unknown options are passed to the command.
+.TP
+.BI format_time_us " microseconds"
+Converts microseconds to human-readable format.
+.TP
+.BI json_escape " string"
+Escapes a string for JSON output.
+.SH EXIT STATUS
+.B timer
+returns the exit status of the timed command.
+.PP
+Exit codes for
+.B timer
+itself:
+.TP
+.B 0
+Success (help or version displayed)
+.TP
+.B 1
+No command specified
+.TP
+.B 22
+Invalid option (ERR_INVAL)
+.SH ENVIRONMENT
+.TP
+.B EPOCHREALTIME
+Bash 5.0+ variable providing seconds since epoch with microsecond
+precision. Required for
+.B timer
+to function.
+.SH NOTES
+.SS errexit Safety
+.B timer
+temporarily disables
+.B set \-e
+during command execution and restores the original state afterward.
+This prevents the timed command's non-zero exit from terminating
+the calling script.
+.SS Color Output
+Commands using
+.B \-\-color=auto
+may not display colors due to TTY detection.
+Workarounds:
+.PP
+.nf
+.RS
+timer ls \-\-color=always
+FORCE_COLOR=1 timer npm test
+.RE
+.fi
+.SS Subshells
+Functions are exported with
+.B declare \-fx
+and work in subshells:
+.PP
+.nf
+.RS
+(timer sleep 0.5)
+.RE
+.fi
+.SH IMPLEMENTATION
+Pure Bash integer arithmetic:
+.PP
+.nf
+.RS
+# Remove decimal point for integer math
+start_us=${EPOCHREALTIME//./}
+
+# Integer subtraction
+elapsed_us=$((end_us \- start_us))
+
+# Scientific notation for conversion back
+printf "%.6f" "${elapsed_us}e\-6"
+.RE
+.fi
+.PP
+Time constants scaled to microseconds:
+.br
+1 day = 86400000000
+.br
+1 hour = 3600000000
+.br
+1 minute = 60000000
+.SH SEE ALSO
+.BR time (1),
+.BR bash (1)
+.SH BUGS
+Report bugs at:
+.UR https://github.com/Open-Technology-Foundation/timer/issues
+.UE
+.SH AUTHOR
+Open Technology Foundation
+.SH LICENSE
+GPL-3.0
