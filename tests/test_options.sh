@@ -52,7 +52,7 @@ assert_contains "$stderr" "Invalid option" "Script invalid option shows error me
 # Test 6: Script mode invalid option shows usage
 capture_output stdout stderr exit_code "$SCRIPT_DIR/../timer" --invalid echo "test"
 assert_failure "$exit_code" 22 "Script invalid long option exits with 22"
-assert_contains "$stdout" "Usage:" "Script invalid option shows usage"
+assert_contains "$stderr" "Usage:" "Script invalid option shows usage"
 
 # Test 7: Script mode combined options -fh
 capture_output stdout stderr exit_code "$SCRIPT_DIR/../timer" -fh
