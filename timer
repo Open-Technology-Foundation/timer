@@ -132,7 +132,7 @@ declare -fx timer
 set -euo pipefail
 shopt -s inherit_errexit
 
-declare -r VERSION=1.2.0
+declare -r VERSION=1.3.0
 declare -r SCRIPT_NAME=${0##*/}
 
 show_help() {
