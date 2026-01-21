@@ -1,50 +1,56 @@
 #!/bin/bash
-# High-precision command timer with optional formatted output
-# Pure Bash implementation - zero external dependencies
-# Uses EPOCHREALTIME for microsecond precision timing
+# timer - High-precision command timer (µs accuracy)
+#
+# USAGE:   timer [OPTIONS] <command> [args...]
+#          source timer && timer -f <command>
+#
+# OPTIONS: -f  Human-readable format (1d 02h 34m 56.789s)
+#          -j  JSON output with full timing data
+#          -o  Output destination (default: stderr)
+#
+# FEATURES:
+#   - Pure Bash, zero dependencies
+#   - Microsecond precision via EPOCHREALTIME
+#   - Preserves command exit status
+#   - Dual-mode: script or sourceable library
 
-# Format time in human-readable format (days, hours, minutes, seconds)
-# Input: microseconds as integer
-# Output: formatted string like "1d 02h 34m 56.789s"
-# Uses pure Bash integer arithmetic with microsecond-scaled time constants
+# format_time_us <microseconds>
+# Converts µs integer to human-readable string: "1d 02h 34m 56.789s"
+# Units shown progressively (days only if >0, etc.)
 format_time_us() {
   local -i remaining_us=$1
   local -i days hours minutes
   local -- output=''
 
-  # Time constants in microseconds (seconds * 1,000,000)
+  # Time constants in µs
   local -i -r day_us=86400000000 hour_us=3600000000 minute_us=60000000
 
-  # Calculate days using integer division
   days=$((remaining_us / day_us))
   if ((days)); then
     output="${days}d "
     remaining_us=$((remaining_us - days * day_us))
   fi
 
-  # Calculate hours
   hours=$((remaining_us / hour_us))
   if ((hours || days)); then
     output="${output}$(printf '%02dh ' "$hours")"
     remaining_us=$((remaining_us - hours * hour_us))
   fi
 
-  # Calculate minutes
   minutes=$((remaining_us / minute_us))
   if ((minutes || hours || days)); then
     output="${output}$(printf '%02dm ' "$minutes")"
     remaining_us=$((remaining_us - minutes * minute_us))
   fi
 
-  # Always show seconds (convert microseconds back to seconds with printf)
-  # Uses scientific notation: 1234567e-6 = 1.234567
+  # Seconds always shown; Xe-6 = scientific notation for µs→s conversion
   output="${output}$(printf '%.3fs' "${remaining_us}e-6")"
   echo "$output"
 }
 declare -fx format_time_us
 
-# Escape string for JSON output
-# Handles: backslash, quotes, newlines, tabs, carriage returns
+# json_escape <string>
+# Escapes string for JSON: \ " \n \t \r
 json_escape() {
   local -- str=$1
   str=${str//\\/\\\\}
@@ -56,10 +62,10 @@ json_escape() {
 }
 declare -fx json_escape
 
-# High-precision timing with EPOCHREALTIME
-# Captures execution time of any command with microsecond precision
-# Preserves command exit status and errexit state
-# Options: -f (formatted), -j (JSON output), -h/-V (noop in function mode)
+# timer [-f] [-j] [-o FILE] [--] <command> [args...]
+# Times command execution with µs precision. Preserves exit status.
+# Options: -f=formatted, -j=JSON, -o=output file, --=end options
+# When sourced: -h/-V are noops; unknown options pass to command
 timer() {
   local -- runtime output_to=/dev/stderr
   local -i formatted=0 json_output=0 errno=0
@@ -67,65 +73,33 @@ timer() {
   # Parse options
   while (($#)); do
     case $1 in
-      --)
-        # End-of-options separator - consume and stop processing
-        shift
-        break
-        ;;
-      -f|--format)
-        formatted=1
-        shift
-        ;;
-      -j|--json)
-        json_output=1
-        shift
-        ;;
-      -o|--output-to)
-        shift
-        output_to=${1:-/dev/stderr}
-        shift
-        ;;
-      -h|--help|-V|--version)
-        # Noop - silently ignore in function mode
-        shift
-        ;;
-      -[fjhV]?*)
-        # Peel first option, recurse (e.g., -fj -> -f -j)
-        set -- "${1:0:2}" "-${1:2}" "${@:2}"
-        continue
-        ;;
-      -*)
-        # Unknown option - treat as part of command
-        break
-        ;;
-      *)
-        # First non-option argument
-        break
-        ;;
+      --)                shift; break ;;
+      -f|--format)       formatted=1; shift ;;
+      -j|--json)         json_output=1; shift ;;
+      -o|--output-to)    shift; output_to=${1:-/dev/stderr}; shift ;;
+      -h|--help|-V|--version) shift ;;  # Noop in function mode
+      -[fjhV]?*)         set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;  # Split combined opts
+      -*)                break ;;  # Unknown opt → part of command
+      *)                 break ;;
     esac
   done
 
-  # Convert EPOCHREALTIME to integer microseconds (remove decimal point)
-  # Example: 1234567890.123456 -> 1234567890123456
+  # EPOCHREALTIME → integer µs (1234567890.123456 → 1234567890123456)
   local -i start_us=${EPOCHREALTIME//./}
 
-  # Temporarily disable errexit for command execution to prevent script termination
-  # This ensures the user's command runs in its natural environment without set -e
-  # Save errexit state first to restore it afterward
+  # Disable errexit during command execution, restore after
   local -i errexit_was_set=0
   [[ $- == *e* ]] && errexit_was_set=1 ||:
   set +e
   "$@"
   errno=$?
-  # Restore errexit state only if it was originally set
   ((errexit_was_set)) && set -e ||:
 
-  # Calculate elapsed time in microseconds using pure Bash integer arithmetic
   local -i end_us=${EPOCHREALTIME//./}
   local -i elapsed_us=$((end_us - start_us))
 
   if ((json_output)); then
-    # JSON output with all timing data and command info
+    # Build JSON: {elapsed_us, elapsed_s, elapsed_formatted, exit_code, command}
     local -- runtime_s cmd_json formatted_time arg
     local -i first=1
     runtime_s=$(printf '%.6f' "${elapsed_us}e-6")
@@ -140,124 +114,86 @@ timer() {
     printf '\n{"elapsed_us":%d,"elapsed_s":%s,"elapsed_formatted":"%s","exit_code":%d,"command":%s}\n' \
       "$elapsed_us" "$runtime_s" "$formatted_time" "$errno" "$cmd_json" >>"$output_to"
   elif ((formatted)); then
-    # Pass microseconds directly to format_time_us for human-readable output
     echo -e "\n# ${FUNCNAME[0]}: $(format_time_us "$elapsed_us")" >>"$output_to"
   else
-    # Convert microseconds to seconds using printf scientific notation
     runtime=$(printf "%.6f" "${elapsed_us}e-6")
     echo -e "\n# ${FUNCNAME[0]}: ${runtime}s" >>"$output_to"
   fi
 
-  # Return the command's original exit status
   return "$errno"
 }
 declare -fx timer
 
 
-# If sourced (not run as script), functions are now loaded - return immediately
+# Return here if sourced (functions already exported above)
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
-# ============================================================================
-# Script Mode - Only executed when run directly, not when sourced
-# ============================================================================
+# === Script Mode ===
 set -euo pipefail
 shopt -s inherit_errexit
 
 declare -r VERSION=1.2.0
 declare -r SCRIPT_NAME=${0##*/}
 
-# Usage function
 show_help() {
   cat <<HELP
 $SCRIPT_NAME $VERSION - High-precision command timer
 
-Times the execution of any command with microsecond precision using EPOCHREALTIME.
-Pure Bash implementation with zero external dependencies.
-
-Usage: $SCRIPT_NAME [Options] <command> [args...]
-       source $SCRIPT_NAME  # to load timer function
+Usage: $SCRIPT_NAME [OPTIONS] <command> [args...]
+       source $SCRIPT_NAME  # Load as library
 
 Options:
-  -f, --format          Format output as Xd XXh XXm X.XXXs (human-readable)
-  -j, --json            Output timing results as JSON
-  -o, --output-to FILE  Write timing output to FILE (default: /dev/stderr)
-  -h, --help            Display this help message
-  -V, --version         Display version information
+  -f, --format          Human-readable: 1d 02h 34m 56.789s
+  -j, --json            JSON output for scripting
+  -o, --output-to FILE  Write to FILE (default: stderr)
+  -h, --help            Show this help
+  -V, --version         Show version
 
-  Combined options supported: -fj, -jh, etc. (not with -o)
+Combined short options: -fj (not with -o)
 
 Examples:
-  # Time a simple command
-  $SCRIPT_NAME sleep 1
+  $SCRIPT_NAME sleep 1              # Basic timing
+  $SCRIPT_NAME -f make -j4          # Formatted output
+  $SCRIPT_NAME -j ./build.sh        # JSON for parsing
+  $SCRIPT_NAME -o log.txt sleep 1   # Output to file
 
-  # Time with formatted output
-  $SCRIPT_NAME -f make -j4
-
-  # JSON output for scripting
-  $SCRIPT_NAME -j sleep 0.1
-
-  # Combined options
-  $SCRIPT_NAME -fV
-
-  # Output timing to a file
-  $SCRIPT_NAME -o /tmp/timing.txt sleep 1
-
-  # Source and use as function (in scripts or interactive shell)
+Library mode:
   source $SCRIPT_NAME
   timer -f mycommand arg1 arg2
 
-Notes:
-  - Output goes to stderr by default (use -o to change)
-  - Exit status of timed command is preserved
-  - When sourced: -h and -V options are silently ignored
-
+Output: stderr (default), exit status preserved.
 HELP
   exit "${1:-0}"
 }
 
-# Command-line processing - Parse options and build command array
+# Parse CLI arguments
 declare -i formatted=0 json_output=0
 declare -a cmd_args=()
 declare -- output_to=/dev/stderr
 
-# Require at least one argument
 (($#)) || >&2 show_help 1
 
-# Process all options before the command
 while (($#)); do
   case $1 in
-    --)           # End-of-options separator - consume and stop processing
-                  shift
-                  cmd_args=("$@")
-                  break ;;
+    --)           shift; cmd_args=("$@"); break ;;
     -f|--format)  formatted=1 ;;
     -j|--json)    json_output=1 ;;
-    -o|--output-to)
-                  shift
-                  output_to=${1:-/dev/stderr} ;;
+    -o|--output-to) shift; output_to=${1:-/dev/stderr} ;;
     -h|--help)    show_help 0 ;;
     -V|--version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
-    -[fjhV]?*) # Peel first option, recurse (e.g., -fj -> -f -j)
-                  set -- "${1:0:2}" "-${1:2}" "${@:2}"
-                  continue ;;
-    -*)           # Unknown option - use ${1@Q} for proper shell quoting
-                  >&2 echo "$SCRIPT_NAME: Invalid option ${1@Q}"
-                  >&2 show_help 22 ;;
-    *)            # First non-option argument is the command - capture rest as array
-                  cmd_args=("$@")
-                  break ;;
+    -[fjhV]?*)    set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;
+    -*)           >&2 echo "$SCRIPT_NAME: Invalid option ${1@Q}"; >&2 show_help 22 ;;
+    *)            cmd_args=("$@"); break ;;
   esac
   shift
 done
 
-# Verify we have a command to execute
 if ((${#cmd_args[@]} == 0)); then
   >&2 echo "$SCRIPT_NAME: No command specified"
   >&2 show_help 1
 fi
 
-# Execute the timer function with collected options and command
-# The timer function preserves the command's exit status
+# Run timer with collected options
 declare -a timer_opts=(-o "$output_to")
 ((formatted==0)) || timer_opts+=(-f)
 ((json_output==0)) || timer_opts+=(-j)
