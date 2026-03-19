@@ -14,6 +14,8 @@
 #   - Preserves command exit status
 #   - Dual-mode: script or sourceable library
 
+shopt -s inherit_errexit 2>/dev/null ||:
+
 # format_time_us <microseconds>
 # Converts µs integer to human-readable string: "1d 02h 34m 56.789s"
 # Units shown progressively (days only if >0, etc.)
@@ -73,14 +75,20 @@ timer() {
   # Parse options
   while (($#)); do
     case $1 in
-      --)                shift; break ;;
-      -f|--format)       formatted=1; shift ;;
-      -j|--json)         json_output=1; shift ;;
-      -o|--output-to)    shift; output_to=${1:-/dev/stderr}; shift ;;
+      --)               shift; break ;;
+      -f|--format)      formatted=1; shift ;;
+      -j|--json)        json_output=1; shift ;;
+      -o|--output-to)
+                        shift
+                        if (($# == 0)) || [[ $1 == -* ]]; then
+                          >&2 echo "timer: -o requires a filename argument"
+                          return 22
+                        fi
+                        output_to=$1; shift ;;
       -h|--help|-V|--version) shift ;;  # Noop in function mode
-      -[fjhV]?*)         set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;  # Split combined opts
-      -*)                break ;;  # Unknown opt → part of command
-      *)                 break ;;
+      -[fjohV]?*)       set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;  # Split combined opts
+      -*)               break ;;  # Unknown opt → part of command
+      *)                break ;;
     esac
   done
 
@@ -89,11 +97,11 @@ timer() {
 
   # Disable errexit during command execution, restore after
   local -i errexit_was_set=0
-  [[ $- == *e* ]] && errexit_was_set=1 ||:
+  if [[ $- == *e* ]]; then errexit_was_set=1; fi
   set +e
   "$@"
   errno=$?
-  ((errexit_was_set)) && set -e ||:
+  if ((errexit_was_set)); then set -e; fi
 
   local -i end_us=${EPOCHREALTIME//./}
   local -i elapsed_us=$((end_us - start_us))
@@ -166,37 +174,46 @@ HELP
   exit "${1:-0}"
 }
 
-# Parse CLI arguments
-declare -i formatted=0 json_output=0
-declare -a cmd_args=()
-declare -- output_to=/dev/stderr
+main() {
+  local -i formatted=0 json_output=0
+  local -a cmd_args=()
+  local -- output_to=/dev/stderr
 
-(($#)) || >&2 show_help 1
+  (($#)) || >&2 show_help 1
 
-while (($#)); do
-  case $1 in
-    --)           shift; cmd_args=("$@"); break ;;
-    -f|--format)  formatted=1 ;;
-    -j|--json)    json_output=1 ;;
-    -o|--output-to) shift; output_to=${1:-/dev/stderr} ;;
-    -h|--help)    show_help 0 ;;
-    -V|--version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
-    -[fjhV]?*)    set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;
-    -*)           >&2 echo "$SCRIPT_NAME: Invalid option ${1@Q}"; >&2 show_help 22 ;;
-    *)            cmd_args=("$@"); break ;;
-  esac
-  shift
-done
+  while (($#)); do
+    case $1 in
+      --)           shift; cmd_args=("$@"); break ;;
+      -f|--format)  formatted=1 ;;
+      -j|--json)    json_output=1 ;;
+      -o|--output-to)
+        shift
+        if (($# == 0)) || [[ $1 == -* ]]; then
+          >&2 echo "$SCRIPT_NAME: -o requires a filename argument"
+          >&2 show_help 22
+        fi
+        output_to=$1 ;;
+      -h|--help)    show_help 0 ;;
+      -V|--version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+      -[fjohV]?*)   set -- "${1:0:2}" "-${1:2}" "${@:2}"; continue ;;
+      -*)           >&2 echo "$SCRIPT_NAME: Invalid option ${1@Q}"; >&2 show_help 22 ;;
+      *)            cmd_args=("$@"); break ;;
+    esac
+    shift
+  done
 
-if ((${#cmd_args[@]} == 0)); then
-  >&2 echo "$SCRIPT_NAME: No command specified"
-  >&2 show_help 1
-fi
+  if ((${#cmd_args[@]} == 0)); then
+    >&2 echo "$SCRIPT_NAME: No command specified"
+    >&2 show_help 1
+  fi
 
-# Run timer with collected options
-declare -a timer_opts=(-o "$output_to")
-((formatted==0)) || timer_opts+=(-f)
-((json_output==0)) || timer_opts+=(-j)
+  # Run timer with collected options
+  local -a timer_opts=(-o "$output_to")
+  ((formatted==0)) || timer_opts+=(-f)
+  ((json_output==0)) || timer_opts+=(-j)
 
-timer "${timer_opts[@]}" "${cmd_args[@]}"
+  timer "${timer_opts[@]}" "${cmd_args[@]}"
+}
+
+main "$@"
 #fin

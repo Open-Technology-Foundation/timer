@@ -4,6 +4,7 @@
 # Provides: assertion functions, test tracking, output capture, reporting
 
 set -euo pipefail
+shopt -s inherit_errexit
 
 # Test result tracking
 declare -i TESTS_PASSED=0 TESTS_FAILED=0 TESTS_TOTAL=0
@@ -17,6 +18,7 @@ if [[ -t 1 ]]; then
   declare -r BLUE=$'\033[0;34m'
   declare -r RESET=$'\033[0m'
 else
+  # shellcheck disable=SC2034  # BLUE used by test files that source this framework
   declare -r RED='' GREEN='' YELLOW='' BLUE='' RESET=''
 fi
 
@@ -46,10 +48,11 @@ capture_output() {
   # Clean up temp files
   rm -f "$stdout_file" "$stderr_file"
 
-  # Return values via eval - use printf %q for safe quoting
-  eval "$(printf '%s=%q' "$stdout_var" "$stdout_content")"
-  eval "$(printf '%s=%q' "$stderr_var" "$stderr_content")"
-  eval "$(printf '%s=%q' "$exit_var" "$cmd_exit_code")"
+  # Return values via namerefs (BCS1004: avoid eval)
+  declare -n __co_out=$stdout_var __co_err=$stderr_var __co_rc=$exit_var
+  __co_out=$stdout_content
+  __co_err=$stderr_content
+  __co_rc=$cmd_exit_code
 }
 
 # Assert that two values are equal

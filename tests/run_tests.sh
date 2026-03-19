@@ -5,6 +5,7 @@
 # BCS compliant: pure Bash implementation
 
 set -euo pipefail
+shopt -s inherit_errexit
 
 declare -r VERSION='1.0.0'
 declare -r SCRIPT_NAME=${0##*/}
@@ -65,28 +66,24 @@ run_test_file() {
   local -- output
   local -i exit_code=0
 
-  if ((verbose)); then
-    # Show all output
-    bash "$test_file" || exit_code=$?
-  else
-    # Capture output, only show on failure
-    output=$(bash "$test_file" 2>&1) || exit_code=$?
+  # Capture output in both modes (needed for count extraction)
+  output=$(bash "$test_file" 2>&1) || exit_code=$?
 
-    if ((exit_code != 0)); then
-      echo "$output"
-    else
-      # Just show the summary line from output
-      if [[ "$output" =~ Passed:\ ([0-9]+) ]]; then
-        local -i passed=${BASH_REMATCH[1]}
-        echo "${GREEN}All tests passed! ($passed)${RESET}"
-      fi
+  if ((verbose)); then
+    echo "$output"
+  elif ((exit_code != 0)); then
+    echo "$output"
+  else
+    # Just show the summary line from output
+    if [[ "$output" =~ Passed:\ ([0-9]+) ]]; then
+      local -i passed=${BASH_REMATCH[1]}
+      echo "${GREEN}All tests passed! ($passed)${RESET}"
     fi
   fi
 
   # Extract pass/fail counts from output
   if [[ "$output" =~ Total:\ \ ([0-9]+) ]]; then
-    local -i total=${BASH_REMATCH[1]}
-    TOTAL_TESTS+=total
+    TOTAL_TESTS+=${BASH_REMATCH[1]}
   fi
 
   if [[ "$output" =~ Passed:\ ([0-9]+) ]]; then
@@ -97,7 +94,7 @@ run_test_file() {
   if [[ "$output" =~ Failed:\ ([0-9]+) ]]; then
     local -i failed=${BASH_REMATCH[1]}
     TOTAL_FAILED+=failed
-    if ((failed > 0)); then
+    if ((failed)); then
       FAILED_FILES+=("$test_name")
     fi
   fi

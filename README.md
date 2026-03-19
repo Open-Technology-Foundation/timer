@@ -34,7 +34,7 @@ sudo make install
 | `make uninstall` | Remove system install |
 | `make uninstall-user` | Remove user install |
 
-Installs both the script and bash completion.
+Installs the script, man page, and bash completion.
 
 ## Usage
 
@@ -82,10 +82,10 @@ Combined short options: `-fj` (not with `-o`)
 
 ### Formatted (`-f`)
 ```
-0.123s                    # seconds only
-02m 15.456s               # with minutes
-01h 23m 45.678s           # with hours
-2d 13h 45m 10.234s        # with days
+# timer: 0.123s                    # seconds only
+# timer: 02m 15.456s               # with minutes
+# timer: 01h 23m 45.678s           # with hours
+# timer: 2d 13h 45m 10.234s        # with days
 ```
 
 ### JSON (`-j`)

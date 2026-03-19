@@ -3,6 +3,7 @@
 # Install: cp timer.bash-completion ~/.local/share/bash-completion/completions/timer
 
 _timer() {
+  # shellcheck disable=SC2034  # words/cword used by _init_completion
   local cur prev words cword
   _init_completion || return
 
@@ -15,12 +16,12 @@ _timer() {
   esac
 
   if [[ $cur == -* ]]; then
-    COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+    mapfile -t COMPREPLY < <(compgen -W "$opts" -- "$cur")
     return
   fi
 
   # Complete commands (executables in PATH)
-  COMPREPLY=($(compgen -c -- "$cur"))
+  mapfile -t COMPREPLY < <(compgen -c -- "$cur")
 }
 
 complete -F _timer timer

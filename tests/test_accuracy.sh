@@ -8,6 +8,7 @@
 # - Pure Bash implementation validation
 
 set -euo pipefail
+shopt -s inherit_errexit
 
 # Load test framework
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

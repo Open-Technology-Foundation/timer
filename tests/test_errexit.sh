@@ -6,6 +6,7 @@
 # - Nested function interactions
 
 set -euo pipefail
+shopt -s inherit_errexit
 
 # Load test framework
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -183,7 +184,7 @@ assert_equals "SURVIVED" "$result" "timer() works after natural command failure"
 test_pipeline_with_timer() {
   set -e
   local -- result
-  result=$(timer echo "test" 2>/dev/null | tr 'a-z' 'A-Z')
+  result=$(timer echo "test" 2>/dev/null | tr '[:lower:]' '[:upper:]')
   echo "$result"
 }
 result=$(test_pipeline_with_timer)

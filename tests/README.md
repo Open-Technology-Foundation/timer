@@ -25,13 +25,15 @@ This test suite follows the same principles as the timer implementation:
 
 | File | Coverage | Test Count |
 |------|----------|------------|
-| `test_basic.sh` | Core timing, exit status, stdout/stderr separation | 13 tests |
-| `test_formatting.sh` | Format flag, time unit calculations, edge durations | 24 tests |
-| `test_options.sh` | Option parsing, combined options, script vs function modes | 23 tests |
-| `test_modes.sh` | Script vs sourced behavior, function export, state isolation | 17 tests |
+| `test_basic.sh` | Core timing, exit status, stdout/stderr separation | 21 tests |
+| `test_formatting.sh` | Format flag, time unit calculations, edge durations | 26 tests |
+| `test_options.sh` | Option parsing, combined options, script vs function modes | 52 tests |
+| `test_modes.sh` | Script vs sourced behavior, function export, state isolation | 21 tests |
 | `test_errexit.sh` | errexit preservation, set -e interactions, state management | 15 tests |
-| `test_edge_cases.sh` | Special chars, empty commands, stdin/stdout/stderr, exit codes | 36 tests |
-| `test_accuracy.sh` | Microsecond precision, arithmetic correctness, pure Bash validation | 27 tests |
+| `test_edge_cases.sh` | Special chars, empty commands, stdin/stdout/stderr, exit codes | 41 tests |
+| `test_accuracy.sh` | Microsecond precision, arithmetic correctness, pure Bash validation | 28 tests |
+| `test_json.sh` | JSON format validation, field types, escaping, combined options | 36 tests |
+| `test_output.sh` | Output file option (-o), redirect to file, works with -f/-j | 45 tests |
 
 ### Infrastructure
 
@@ -40,7 +42,7 @@ This test suite follows the same principles as the timer implementation:
 | `test_framework.sh` | Pure Bash assertion functions and test utilities |
 | `run_tests.sh` | Test runner with discovery and summary reporting |
 
-**Total: ~155 tests** across 7 test files
+**Total: 285 tests** across 9 test files
 
 ## Running Tests
 
@@ -93,6 +95,9 @@ assert_matches <string> <pattern> <test_name>
 
 # Check string does not contain substring
 assert_not_contains <haystack> <needle> <test_name>
+
+# Check string does not match regex pattern
+assert_not_matches <string> <pattern> <test_name>
 ```
 
 ### Utility Functions
@@ -188,6 +193,7 @@ print_summary
 # Test <feature description>
 
 set -euo pipefail
+shopt -s inherit_errexit
 
 # Load test framework
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -230,7 +236,7 @@ print_summary
 ======================================
     Timer Test Suite Runner
 ======================================
-Found 7 test files
+Found 10 test files
 
 Running: test_basic
 ========================================
@@ -252,8 +258,8 @@ Running: test_formatting
 ======================================
 All tests passed!
 
-Total Tests:  155
-Passed:       155
+Total Tests:  285
+Passed:       285
 Failed:       0
 ======================================
 ```
